@@ -18,60 +18,19 @@ env:
 
 jobs:
   frontend-build:
+    strategy:
+      fail-fast: false
     runs-on: ubuntu-24.04
-    outputs:
-      should-run: ${{ steps.check.outputs.frontend }}
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      - name: Check for File Changes
-        id: check
-        uses: ./.github/actions/change-detector/
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Build Docker Image
-        if: steps.check.outputs.frontend
         shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           docker buildx build \
             -t $TAG \
             --cache-from=type=registry,ref=apache/superset-cache:3.10-slim-bookworm \
             --target superset-node-ci \
             .
-
-      - name: Save Docker Image as Artifact
-        if: steps.check.outputs.frontend
-        run: |
-          docker save $TAG | gzip > docker-image.tar.gz
-
-      - name: Upload Docker Image Artifact
-        if: steps.check.outputs.frontend
-        uses: actions/upload-artifact@v4
-        with:
-          name: docker-image
-          path: docker-image.tar.gz
-
-  sharded-jest-tests:
-    needs: frontend-build
-    if: needs.frontend-build.outputs.should-run == 'true'
-    strategy:
-      fail-fast: false
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Download Docker Image Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: docker-image
-
-      - name: Load Docker Image
-        run: docker load < docker-image.tar.gz
-
+      
       - name: npm run test with coverage
         run: |
           mkdir -p ${{ github.workspace }}/superset-frontend/coverage
